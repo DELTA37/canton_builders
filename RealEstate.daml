@@ -1,0 +1,24 @@
+module RealEstate where
+
+import DA.Text
+
+template RealEstate
+  with
+    registrar : Party         -- нотариус/регистратор
+    owner : Party             -- текущий владелец
+    propertyId : Text         -- уникальный идентификатор недвижимости
+    metaJson : Text           -- JSON с метаданными
+    history : [Party]         -- история владельцев
+  where
+    signatory registrar
+
+    -- Передача недвижимости новому владельцу
+    choice Transfer : ContractId RealEstate
+      with
+        newOwner : Party
+      controller owner
+      do
+        create this
+          with
+            owner = newOwner
+            history = history <> [owner]   -- добавляем текущего владельца в историю
