@@ -1,0 +1,29 @@
+module Test where
+
+import Daml.Script
+import RealEstate
+
+test : Script ()
+test = script do
+  registrar <- allocateParty "Registrar"
+  owner <- allocateParty "Owner"
+
+  let meta = "{ \"address\": \"Baker St 221b\" }"
+
+  cid <- submit registrar do
+    createCmd RealEstate
+      with
+        registrar
+        owner
+        propertyId = "ID-1"
+        metaJson = meta
+        history = []
+
+  debug ("Created RealEstate", cid)
+
+  cid2 <- submit owner do
+    exerciseCmd cid (Transfer with newOwner = registrar)
+
+  debug ("Transferred", cid2)
+
+  pure ()

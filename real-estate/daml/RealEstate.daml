@@ -1,6 +1,6 @@
 module RealEstate where
 
-import DA.Text
+import DA.Text()
 
 template RealEstate
   with
