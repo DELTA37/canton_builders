@@ -1,0 +1,29 @@
+module Main where
+
+import Daml.Script
+import RealEstate
+
+-- Ledger bootstrap script invoked via daml.yaml init-script.
+setup : Script ()
+setup = script do
+  registrar <- allocateParty "Registrar"
+  owner <- allocateParty "Owner"
+
+  let meta = "{ \"address\": \"Baker St 221b\", \"rooms\": 3 }"
+
+  cid <- submit registrar do
+    createCmd RealEstate
+      with
+        registrar
+        owner
+        propertyId = "ID-1"
+        address = "Baker St 221b"
+        propertyType = "apartment"
+        area = 72.5
+        metaJson = meta
+        status = Active
+        history = []
+
+  debug ("Created RealEstate", cid)
+
+  pure ()

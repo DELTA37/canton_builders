@@ -2,22 +2,48 @@ module RealEstate where
 
 import DA.Text()
 
+data PropertyStatus = Active | Archived deriving (Eq, Show)
+
 template RealEstate
   with
-    registrar : Party         -- нотариус/регистратор
-    owner : Party             -- текущий владелец
-    propertyId : Text         -- уникальный идентификатор недвижимости
-    metaJson : Text           -- JSON с метаданными
-    history : [Party]         -- история владельцев
+    registrar : Party         -- registrar/notary
+    owner : Party             -- current owner
+    propertyId : Text         -- unique property id
+    address : Text            -- human-readable address
+    propertyType : Text       -- apartment/house/land/etc
+    area : Decimal            -- square meters
+    metaJson : Text           -- free-form JSON metadata
+    status : PropertyStatus   -- lifecycle status
+    history : [Party]         -- owner history (latest appended)
   where
     signatory registrar
+    observer owner
+
+    ensure status == Active
 
     choice Transfer : ContractId RealEstate
       with
         newOwner : Party
       controller owner
       do
-        create this
+        assertMsg "Cannot transfer archived property" (status == Active)
+        newCid <- create this
           with
             owner = newOwner
-            history = history <> [owner]   -- добавляем текущего владельца в историю
+            history = history <> [owner]
+        return newCid
+
+    choice UpdateMeta : ContractId RealEstate
+      with
+        newMetaJson : Text
+      controller owner
+      do
+        assertMsg "Cannot update archived property" (status == Active)
+        newCid <- create this with metaJson = newMetaJson
+        return newCid
+
+    choice ArchiveProperty : ()
+      controller registrar
+      do
+        assertMsg "Already archived" (status == Active)
+        archive self

@@ -2,13 +2,18 @@ module Test where
 
 import Daml.Script
 import RealEstate
+import DA.Assert (assertEq)
 
 test : Script ()
-test = script do
+test = testHappy
+
+testHappy : Script ()
+testHappy = script do
   registrar <- allocateParty "Registrar"
   owner <- allocateParty "Owner"
+  buyer <- allocateParty "Buyer"
 
-  let meta = "{ \"address\": \"Baker St 221b\" }"
+  let meta = "{ \"address\": \"Baker St 221b\", \"rooms\": 3 }"
 
   cid <- submit registrar do
     createCmd RealEstate
@@ -16,14 +21,53 @@ test = script do
         registrar
         owner
         propertyId = "ID-1"
+        address = "Baker St 221b"
+        propertyType = "apartment"
+        area = 72.5
         metaJson = meta
+        status = Active
         history = []
 
   debug ("Created RealEstate", cid)
 
   cid2 <- submit owner do
-    exerciseCmd cid (Transfer with newOwner = registrar)
+    exerciseCmd cid (Transfer with newOwner = buyer)
 
   debug ("Transferred", cid2)
 
+  cid3 <- submit buyer do
+    exerciseCmd cid2 (UpdateMeta with newMetaJson = "{ \"address\": \"Baker St 221b\", \"rooms\": 4 }")
+
+  debug ("Updated meta", cid3)
+
+  mState <- queryContractId registrar cid3
+  case mState of
+    Some st -> assertEq st.history [owner]
+    None -> abort "Expected contract to exist after update"
+
   pure ()
+
+testTransferMustFailForNonOwner : Script ()
+testTransferMustFailForNonOwner = script do
+  registrar <- allocateParty "Registrar"
+  owner <- allocateParty "Owner"
+  intruder <- allocateParty "Intruder"
+
+  cid <- submit registrar do
+    createCmd RealEstate
+      with registrar
+           owner
+           propertyId = "ID-FAIL-1"
+           address = "Main St 1"
+           propertyType = "house"
+           area = 120.0
+           metaJson = "{}"
+           status = Active
+           history = []
+
+  submitMustFail registrar do
+    exerciseCmd cid (Transfer with newOwner = intruder)
+
+  pure ()
+
+-- No archive tests here to keep ledger state simple in scripts.
