@@ -30,6 +30,8 @@ if [ "${SKIP_SANDBOX:-false}" != "true" ]; then
   daml start \
     --sandbox-option --config="${SANDBOX_CONFIG}" \
     --json-api-port "${JSON_API_PORT}" \
+#    --json-api-option "--ledger-host ${LEDGER_HOST}" \
+#    --json-api-option "--ledger-port ${LEDGER_PORT}" \
     --wait-for-signal "${WAIT_FOR_SIGNAL}" \
     >log/app-sandbox.log 2>&1 &
   SANDBOX_PID=$!

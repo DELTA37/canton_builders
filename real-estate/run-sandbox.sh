@@ -8,9 +8,13 @@ set -euo pipefail
 JSON_API_PORT="${JSON_API_PORT:-17575}"
 SANDBOX_CONFIG="${SANDBOX_CONFIG:-sandbox.conf}"
 WAIT_FOR_SIGNAL="${WAIT_FOR_SIGNAL:-yes}"
+LEDGER_HOST="${LEDGER_HOST:-localhost}"
+LEDGER_PORT="${LEDGER_PORT:-26865}"
 
 echo "Starting daml sandbox with config=${SANDBOX_CONFIG}, json-api=${JSON_API_PORT}, wait-for-signal=${WAIT_FOR_SIGNAL}"
 exec daml start \
   --sandbox-option --config="${SANDBOX_CONFIG}" \
+  --json-api-option "--ledger-host ${LEDGER_HOST}" \
+  --json-api-option "--ledger-port ${LEDGER_PORT}" \
   --json-api-port "${JSON_API_PORT}" \
   --wait-for-signal "${WAIT_FOR_SIGNAL}"
