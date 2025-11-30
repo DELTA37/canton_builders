@@ -2,3 +2,4 @@
 real-estate/log
 real-estate/.daml
 .idea
+real-estate/*.log
