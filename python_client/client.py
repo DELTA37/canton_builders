@@ -75,6 +75,8 @@ def to_jsonable(val: Any) -> Any:
 
 
 class RealEstateHandler:
+    _template_type = None  # cached TypeConName for RealEstate template
+
     """
     Асинхронный клиент для взаимодействия с Daml леджером для контрактов RealEstate и Cash.
 
@@ -118,7 +120,6 @@ class RealEstateHandler:
 
         self.client = None
         self.party = None  # resolved party id
-        self._template_type = None  # cached TypeConName for RealEstate template
 
     def _url(self) -> str:
         """

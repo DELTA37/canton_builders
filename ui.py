@@ -12,72 +12,191 @@ st.set_page_config(page_title="Canton Real Estate", layout="wide")
 
 _CSS = """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+:root {
+  --bg: #050b18;
+  --panel: rgba(255, 255, 255, 0.04);
+  --panel-strong: rgba(255, 255, 255, 0.08);
+  --stroke: rgba(255, 255, 255, 0.12);
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #7dd3fc;
+  --accent-2: #fbbf24;
+}
+html, body, [class*="css"] {
+  font-family: "Space Grotesk", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+}
 body {
-  background: #0b1021;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(125, 211, 252, 0.12), transparent 25%),
+    radial-gradient(circle at 90% 10%, rgba(251, 191, 36, 0.14), transparent 25%),
+    radial-gradient(circle at 20% 80%, rgba(56, 189, 248, 0.08), transparent 30%),
+    linear-gradient(135deg, #050b18, #0a1530 65%, #051024);
+  color: var(--text);
+}
+.stApp {
+  background: black;
+}
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #040915, #071022);
+  border-right: 1px solid var(--stroke);
+}
+[data-testid="stSidebar"] * {
+  color: var(--text) !important;
 }
 .hero {
-  padding: 22px 26px;
-  border-radius: 16px;
-  background: radial-gradient(circle at 10% 20%, #1f4b99 0, #0b1021 45%), linear-gradient(120deg, #0f1b2d, #0b1021);
-  color: #f5f7ff;
-  margin-bottom: 18px;
-}
-.hero__title {
-  font-size: 28px;
-  font-weight: 800;
-  margin-bottom: 6px;
-  letter-spacing: -0.5px;
-}
-.hero__subtitle {
-  opacity: 0.85;
+  position: relative;
+  padding: 26px 28px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(80, 136, 255, 0.08)), var(--panel);
+  border: 1px solid var(--stroke);
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
   margin-bottom: 12px;
 }
+.hero:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(125, 211, 252, 0.35), transparent 40%),
+    radial-gradient(circle at 80% 10%, rgba(251, 191, 36, 0.45), transparent 35%);
+  filter: blur(38px);
+  opacity: 0.6;
+}
+.hero__content { position: relative; z-index: 2; }
+.hero__eyebrow { color: var(--accent); font-weight: 600; letter-spacing: 0.12em; font-size: 12px; text-transform: uppercase; }
+.hero__title { font-size: 30px; font-weight: 800; margin: 6px 0 4px; letter-spacing: -0.4px; }
+.hero__subtitle { opacity: 0.9; max-width: 760px; margin-bottom: 12px; color: var(--muted); }
+.hero__meta { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill {
-  display: inline-block;
-  padding: 6px 12px;
-  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--stroke);
   font-size: 12px;
+  color: var(--text);
 }
-.card {
-  padding: 14px 16px;
+.pill strong { color: #fff; }
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+.toolbar {
+  margin: 16px 0 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.toolbar__item {
+  padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: #0f172a;
-  color: #eef2ff;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  border: 1px solid var(--stroke);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  color: var(--text);
 }
+.toolbar__label { color: var(--muted); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+.toolbar__value { font-weight: 700; font-size: 15px; margin-top: 4px; }
 .section-title {
   font-size: 18px;
   margin-bottom: 6px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--text);
 }
-.muted { color: #94a3b8; font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
 .chip {
-  background: #1e293b;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.07);
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
   font-size: 12px;
-  color: #cbd5f5;
+  color: var(--text);
 }
 .stat {
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
   padding: 12px 14px;
-  color: #e2e8f0;
+  color: var(--text);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
 }
-.stat .label { font-size: 12px; color: #cbd5e1; }
-.stat .value { font-size: 20px; font-weight: 800; }
+.stat .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.stat .value { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; }
+.card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
 .card-light {
-  background: #0f172a;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke);
   border-radius: 14px;
   padding: 14px 16px;
-  color: #e2e8f0;
+  color: var(--text);
+}
+[data-testid="stExpander"] {
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.04);
+}
+.stButton>button {
+  background: linear-gradient(135deg, var(--accent), #4dd4c2);
+  color: #041426;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+}
+.stButton>button:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(0,0,0,0.28); }
+.stButton>button:active { transform: translateY(0); }
+input, textarea {
+  color: var(--text) !important;
+}
+.stTextInput input, .stNumberInput input, .stTextArea textarea {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--stroke) !important;
+  border-radius: 12px !important;
+}
+.stSelectbox [data-baseweb="select"], .stMultiSelect [data-baseweb="select"] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--stroke) !important;
+}
+.stSelectbox [data-baseweb="popover"], .stMultiSelect [data-baseweb="popover"] {
+  background: #0a1425 !important;
+  color: var(--text) !important;
+}
+.stRadio > label { font-weight: 700; color: var(--text); }
+.stTabs [data-baseweb="tab"] {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px 12px 0 0;
+  border: 1px solid var(--stroke);
+  margin-right: 6px;
+}
+.stTabs [data-baseweb="tab"]:hover { border-color: var(--accent); }
+.stTabs [aria-selected="true"] {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(251, 191, 36, 0.15));
+}
+.stTable { border-radius: 12px; overflow: hidden; }
+.stTable table {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.stTable th, .stTable td {
+  border-color: var(--stroke) !important;
+}
+.stTable tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
 }
 </style>
 """
@@ -164,11 +283,47 @@ def select_party(label: str, default: str, key: str, options: List[str]) -> str:
 st.markdown(
   f"""
   <div class="hero">
-    <div class="hero__title">Canton Real Estate Hub</div>
-    <div class="hero__subtitle">Registration, roles (Registrar / Seller / Buyer), trades and wallets</div>
-    <div class="pill">Current user: {current_party()}</div>
-    <div class="pill">Ledger: {host}:{int(port)}</div>
-    <div class="pill">View as: {market_party}</div>
+    <div class="hero__content">
+      <div class="hero__eyebrow">Digital registry · Canton</div>
+      <div class="hero__title">Canton Real Estate Hub</div>
+      <div class="hero__subtitle">
+        Manage registration, roles (Registrar / Seller / Buyer), listings and settlements through the JSON API.
+        Clean, presentation-ready workspace for demos and deal flows.
+      </div>
+      <div class="hero__meta">
+        <span class="pill"><span class="badge-dot"></span><strong>User:</strong> {current_party()}</span>
+        <span class="pill"><span class="badge-dot"></span><strong>Viewing as:</strong> {market_party}</span>
+        <span class="pill"><span class="badge-dot"></span><strong>Ledger:</strong> {host}:{int(port)}</span>
+      </div>
+    </div>
+  </div>
+  """,
+  unsafe_allow_html=True,
+)
+
+st.markdown(
+  f"""
+  <div class="toolbar">
+    <div class="toolbar__item">
+      <div class="toolbar__label">Ledger endpoint</div>
+      <div class="toolbar__value">{host}:{int(port)}</div>
+      <div class="muted">JSON API connection</div>
+    </div>
+    <div class="toolbar__item">
+      <div class="toolbar__label">Current user</div>
+      <div class="toolbar__value">{current_party()}</div>
+      <div class="muted">Role: {st.session_state["role"]}</div>
+    </div>
+    <div class="toolbar__item">
+      <div class="toolbar__label">Market view</div>
+      <div class="toolbar__value">{market_party}</div>
+      <div class="muted">Available listings</div>
+    </div>
+    <div class="toolbar__item">
+      <div class="toolbar__label">Focus</div>
+      <div class="toolbar__value">Registry · trades · wallet</div>
+      <div class="muted">Canton Real Estate</div>
+    </div>
   </div>
   """,
   unsafe_allow_html=True,
@@ -193,12 +348,12 @@ stat_cols = st.columns(4)
 stat_cols[0].markdown(f"<div class='stat'><div class='label'>Total properties (view)</div><div class='value'>{len(market_props)}</div></div>", unsafe_allow_html=True)
 stat_cols[1].markdown(f"<div class='stat'><div class='label'>Listed for sale</div><div class='value'>{len(listed_props)}</div></div>", unsafe_allow_html=True)
 stat_cols[2].markdown(f"<div class='stat'><div class='label'>Current role</div><div class='value'>{role}</div></div>", unsafe_allow_html=True)
-stat_cols[3].markdown(f"<div class='stat'><div class='label'>View as</div><div class='value'>{market_party}</div></div>", unsafe_allow_html=True)
+stat_cols[3].markdown(f"<div class='stat'><div class='label'>Viewing as</div><div class='value'>{market_party}</div></div>", unsafe_allow_html=True)
 
 tab_registrar, tab_seller, tab_buyer = st.tabs(["Registrar", "Seller", "Buyer"])
 
 with tab_registrar:
-  st.markdown("#### Registration & registry")
+  st.markdown("#### Registry & onboarding")
   registrar_party = st.text_input("Registrar party", value="Registrar", key="registrar-party")
   reg_cols = st.columns([2, 2, 1])
   new_party_hint = reg_cols[0].text_input("New user hint", value="NewUser")
@@ -225,7 +380,7 @@ with tab_registrar:
     if parties:
       st.table(parties)
 
-  st.markdown("#### Create property (as registrar)")
+  st.markdown("#### Create property (Registrar)")
   with st.form("create-reg"):
     owner = st.text_input("Owner party", value="Owner", key="owner-create")
     property_id = st.text_input("Property ID", value="ID-UI-1")
@@ -233,7 +388,7 @@ with tab_registrar:
     property_type = st.text_input("Property type", value="apartment")
     area = st.text_input("Area (decimal)", value="72.5")
     meta_json = st.text_area("Meta JSON", value='{"address":"Baker St 221b","rooms":3}')
-    price = st.text_input("Цена", value="500000.0")
+    price = st.text_input("Price", value="500000.0")
     currency = st.selectbox("Currency", options=["USD", "EUR", "GBP", "CHF"], index=0, key="curr-create")
     listed = st.checkbox("List immediately", value=False, key="list-now")
     submit_reg = st.form_submit_button("Create contract")
@@ -380,7 +535,7 @@ with tab_buyer:
       payload = prop.get("payload", {})
       cols = st.columns([2, 2, 1, 1])
       cols[0].markdown(f"**{payload.get('propertyId')}** — {payload.get('address')}")
-      cols[1].markdown(f"Тип: {payload.get('propertyType')} | Площадь: {payload.get('area')}")
+      cols[1].markdown(f"Type: {payload.get('propertyType')} | Area: {payload.get('area')}")
       cols[2].markdown(f"Price: {price_display(payload)}")
       cols[3].markdown(f"Owner: `{payload.get('owner')}`")
 
