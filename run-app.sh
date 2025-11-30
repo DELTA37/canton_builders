@@ -64,4 +64,5 @@ export LEDGER_HOST LEDGER_PORT
 export JSON_API_URL="http://localhost:${JSON_API_PORT}"
 echo "Starting Streamlit UI on port ${UI_PORT} (LEDGER_HOST=${LEDGER_HOST} LEDGER_PORT=${LEDGER_PORT})..."
 cd ..
-exec streamlit run ui.py --server.port "${UI_PORT}" --server.headless true
+
+streamlit run ui.py --server.port "${UI_PORT}" --server.headless true

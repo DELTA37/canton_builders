@@ -1,5 +1,7 @@
 import asyncio
 import os
+import sys
+import traceback
 from typing import Any, Dict, List
 
 import streamlit as st
@@ -121,6 +123,7 @@ def load_properties(view_party: str) -> List[Dict[str, Any]]:
   try:
     return run_with_handler(view_party, lambda h: h.list_properties_async())
   except Exception as ex:
+    traceback.print_exc(file=sys.stderr)
     st.error(f"Failed to load contracts: {ex}")
     return []
 
@@ -129,6 +132,7 @@ def load_parties(view_party: str) -> List[Dict[str, str]]:
   try:
     return run_with_handler(view_party, lambda h: h.list_parties_async())
   except Exception as ex:
+    traceback.print_exc(file=sys.stderr)
     st.error(f"Failed to load known parties: {ex}")
     return []
 
@@ -137,6 +141,7 @@ def load_cash(view_party: str) -> List[Dict[str, Any]]:
   try:
     return run_with_handler(view_party, lambda h: h.list_cash_async())
   except Exception as ex:
+    traceback.print_exc(file=sys.stderr)
     st.error(f"Failed to load wallet: {ex}")
     return []
 
@@ -147,6 +152,13 @@ def price_display(payload: Dict[str, Any]) -> str:
   if price is None or currency is None:
     return "-"
   return f"{price} {currency}"
+
+
+def select_party(label: str, default: str, key: str, options: List[str]) -> str:
+  if options:
+    idx = options.index(default) if default in options else 0
+    return st.selectbox(label, options=options, index=idx, key=key)
+  return st.text_input(label, value=default, key=key)
 
 
 st.markdown(
@@ -173,6 +185,8 @@ elif role == "Registrar":
   set_current_party("Registrar")
 
 # Market snapshot for dashboard
+known_parties = load_parties(market_party)
+known_party_ids = [p["id"] for p in known_parties]
 market_props = load_properties(market_party)
 listed_props = [p for p in market_props if p.get("payload", {}).get("listed")]
 stat_cols = st.columns(4)
@@ -203,6 +217,7 @@ with tab_registrar:
       else:
         st.info("Party already exists")
     except Exception as ex:
+      traceback.print_exc(file=sys.stderr)
       st.error(f"Failed to create party: {ex}")
 
   if st.button("List known parties", key="list-parties"):
@@ -242,11 +257,12 @@ with tab_registrar:
         st.success("Created")
         st.json(resp)
       except Exception as ex:
+        traceback.print_exc(file=sys.stderr)
         st.error(f"Create failed: {ex}")
 
 with tab_seller:
   st.markdown("#### Seller workspace")
-  seller_party = st.text_input("Seller party", value=current_party(), key="seller-party")
+  seller_party = select_party("Seller party", current_party(), "seller-party", known_party_ids)
   seller_props = [p for p in load_properties(seller_party) if p.get("payload", {}).get("owner") == seller_party]
   seller_listed = [p for p in seller_props if p.get("payload", {}).get("listed")]
   st.markdown(f"<div class='chip'>Owned: {len(seller_props)} • Listed: {len(seller_listed)}</div>", unsafe_allow_html=True)
@@ -284,6 +300,7 @@ with tab_seller:
               st.success("Listed for sale")
               st.json(resp)
             except Exception as ex:
+              traceback.print_exc(file=sys.stderr)
               st.error(f"ListForSale failed: {ex}")
           if submit_delist:
             try:
@@ -294,17 +311,20 @@ with tab_seller:
               st.success("Delisted")
               st.json(resp)
             except Exception as ex:
+              traceback.print_exc(file=sys.stderr)
               st.error(f"Delist failed: {ex}")
 
 with tab_buyer:
   st.markdown("#### Buyer workspace")
-  buyer_party = st.text_input("Buyer party", value=current_party(), key="buyer-party")
+  buyer_party = select_party("Buyer party", current_party(), "buyer-party", known_party_ids)
   buyer_cash = load_cash(buyer_party)
   wallet_cols = st.columns(2)
   with wallet_cols[0]:
     st.markdown("Wallet")
     if not buyer_cash:
       st.info("Wallet is empty. Mint cash first.")
+      if not known_party_ids:
+        st.info("Tip: register parties in the Registrar tab, then select them from the dropdown.")
     else:
       st.table([
         {
@@ -317,7 +337,7 @@ with tab_buyer:
       ])
   with wallet_cols[1]:
     st.markdown("Mint cash")
-    issuer = st.text_input("Issuer (usually seller)", value="Seller", key="mint-issuer")
+    issuer = select_party("Issuer (usually seller)", "Seller", "mint-issuer", known_party_ids)
     mint_amount = st.text_input("Amount", value="500000.0", key="mint-amount")
     mint_currency = st.selectbox("Currency", options=["USD", "EUR", "GBP", "CHF"], index=0, key="mint-curr")
     if st.button("Mint cash", key="mint-btn"):
@@ -334,6 +354,7 @@ with tab_buyer:
         st.success("Cash minted")
         st.json(resp)
       except Exception as ex:
+        traceback.print_exc(file=sys.stderr)
         st.error(f"Mint failed: {ex}")
 
   st.markdown("#### Marketplace")
@@ -401,4 +422,5 @@ with tab_buyer:
               st.success("Trade completed, you are the owner")
               st.json(resp)
             except Exception as ex:
+              traceback.print_exc(file=sys.stderr)
               st.error(f"Purchase failed: {ex}")

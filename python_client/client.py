@@ -2,11 +2,18 @@ import asyncio
 import datetime
 import decimal
 import os
+import sys
+import traceback
 from typing import Any, Dict, List, Optional
 
+from dazl.ledger import ExerciseResponse
+from dazl.ledger.api_types import ContractId
+from dazl.damlast.daml_lf_1 import DottedName, ModuleRef, PackageRef, TypeConName
+from dazl.damlast.daml_lf_1 import DottedName, ModuleRef, PackageRef, TypeConName
+from dazl.damlast.daml_lf_1 import TypeConName
 import dazl
 from dazl import Party
-from dazl.ledger.api_types import CreateEvent
+from dazl.ledger.api_types import CreateEvent, ArchiveEvent
 
 
 DEFAULT_LEDGER_HOST = os.getenv("LEDGER_HOST", "localhost")
@@ -45,9 +52,23 @@ def to_jsonable(val: Any) -> Any:
         return {k: to_jsonable(v) for k, v in val.items()}
     if isinstance(val, (list, tuple, set)):
         return [to_jsonable(v) for v in val]
+    if isinstance(val, ContractId):
+        return {
+            "contractId": val.value,
+            "contractType": str(val.value_type),
+        }
+    if isinstance(val, ExerciseResponse):
+        return {
+            "result": to_jsonable(val.result),
+            "events": to_jsonable(val.events)
+        }
+    if isinstance(val, ArchiveEvent):
+        return {
+            "contractId": to_jsonable(val.contract_id),
+        }
     if isinstance(val, CreateEvent):
         return {
-            "contractId": str(val.contract_id),
+            "contractId": to_jsonable(val.contract_id),
             "payload": to_jsonable(val.payload),
         }
     return str(val)
@@ -97,6 +118,7 @@ class RealEstateHandler:
 
         self.client = None
         self.party = None  # resolved party id
+        self._template_type = None  # cached TypeConName for RealEstate template
 
     def _url(self) -> str:
         """
@@ -149,7 +171,7 @@ class RealEstateHandler:
         )
         self.client = await conn.__aenter__()
         self._conn_cm = conn  # to close on exit
-
+        await self.list_properties_async()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -195,7 +217,9 @@ class RealEstateHandler:
             pass
         return hint
 
-    async def _exercise(self, contract_id: str, choice: str, argument: Dict[str, Any], extra_act_as=None):
+    async def _exercise(self, contract_id: str,
+                        choice: str,
+                        argument: Dict[str, Any], extra_act_as=None):
         """
         Выполняет choice на контракте RealEstate.
 
@@ -215,9 +239,14 @@ class RealEstateHandler:
         act_as = [Party(self.party)]
         if extra_act_as:
             act_as.extend(extra_act_as)
+
+        cid = contract_id
+
+        if isinstance(cid, str):
+            cid = ContractId(self._template_type, contract_id)
+
         res = await self.client.exercise(
-            "RealEstate:RealEstate",
-            contract_id,
+            cid,
             choice,
             argument,
             act_as=act_as,
@@ -352,6 +381,8 @@ class RealEstateHandler:
         result = []
         async for event in self.client.query("RealEstate:RealEstate"):
             if isinstance(event, CreateEvent):
+                if self._template_type is None:
+                    self._template_type = event.contract_id.value_type
                 result.append({
                     "contractId": str(event.contract_id),
                     "payload": to_jsonable(event.payload),
