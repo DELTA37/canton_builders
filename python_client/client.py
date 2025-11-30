@@ -16,6 +16,25 @@ DEFAULT_APP_NAME = os.getenv("LEDGER_APP_NAME", "real-estate-client")
 
 
 def to_jsonable(val: Any) -> Any:
+    """
+    Рекурсивно преобразует значения в JSON-совместимые типы.
+
+    Обрабатывает специальные типы Daml/dazl (Decimal, datetime, CreateEvent)
+    и рекурсивно преобразует вложенные структуры данных.
+
+    Args:
+        val: Значение для преобразования (любой тип).
+
+    Returns:
+        JSON-совместимое представление значения:
+        - примитивы (str, int, float, bool, None) возвращаются как есть
+        - Decimal -> str
+        - datetime -> ISO формат строки
+        - dict -> рекурсивно преобразованный dict
+        - list/tuple/set -> рекурсивно преобразованный list
+        - CreateEvent -> {"contractId": str, "payload": dict}
+        - остальные типы -> str(val)
+    """
     if isinstance(val, (str, int, float, bool)) or val is None:
         return val
     if isinstance(val, decimal.Decimal):
@@ -36,12 +55,22 @@ def to_jsonable(val: Any) -> Any:
 
 class RealEstateHandler:
     """
-    Теперь работает так:
+    Асинхронный клиент для взаимодействия с Daml леджером для контрактов RealEstate и Cash.
 
-        async with RealEstateHandler(party="Registrar") as h:
-            await h.create_property_async(...)
+    Использует библиотеку dazl для подключения к Canton леджеру через gRPC API.
+    Реализует паттерн async context manager для управления жизненным циклом соединения.
 
-    Один connect на весь контекст.
+    Пример использования:
+        async with RealEstateHandler(party="Registrar") as handler:
+            result = await handler.create_property_async(...)
+
+    Attributes:
+        host: Хост леджера (по умолчанию localhost).
+        port: Порт gRPC API леджера (по умолчанию 26865).
+        party_hint: Подсказка для идентификации party (резолвится в канонический ID).
+        app_name: Имя приложения для идентификации в леджере.
+        client: Активное соединение dazl (устанавливается в __aenter__).
+        party: Канонический ID party после резолюции.
     """
 
     def __init__(
@@ -51,6 +80,16 @@ class RealEstateHandler:
         party: str = DEFAULT_PARTY,
         app_name: str = DEFAULT_APP_NAME,
     ):
+        """
+        Инициализирует handler для работы с леджером.
+
+        Args:
+            host: Хост леджера (например, "localhost").
+            port: Порт gRPC API леджера.
+            party: Подсказка для party (например, "Registrar", "Owner").
+                   Будет резолвиться в канонический ID при подключении.
+            app_name: Имя приложения для логирования в леджере.
+        """
         self.host = host
         self.port = port
         self.party_hint = party or "Observer"
@@ -60,6 +99,12 @@ class RealEstateHandler:
         self.party = None  # resolved party id
 
     def _url(self) -> str:
+        """
+        Формирует gRPC URL для подключения к леджеру.
+
+        Returns:
+            URL строка формата "grpc://host:port".
+        """
         return f"grpc://{self.host}:{self.port}"
 
     # =============================
@@ -67,6 +112,19 @@ class RealEstateHandler:
     # =============================
 
     async def __aenter__(self):
+        """
+        Устанавливает соединение с леджером при входе в async context manager.
+
+        Выполняет двухэтапное подключение:
+        1. Временное соединение для резолюции party hint в канонический ID.
+        2. Постоянное соединение с резолвнутым party для выполнения операций.
+
+        Returns:
+            self: Экземпляр RealEstateHandler с установленным соединением.
+
+        Raises:
+            Exception: При ошибках подключения к леджеру.
+        """
         # First: connect with hint
         raw_conn = dazl.connect(
             url=self._url(),
@@ -95,6 +153,14 @@ class RealEstateHandler:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        """
+        Закрывает соединение с леджером при выходе из async context manager.
+
+        Args:
+            exc_type: Тип исключения (если было).
+            exc: Экземпляр исключения (если было).
+            tb: Traceback исключения (если было).
+        """
         if self.client is not None:
             await self._conn_cm.__aexit__(exc_type, exc, tb)
         self.client = None
@@ -104,6 +170,20 @@ class RealEstateHandler:
     # =============================
 
     async def _resolve_party(self, conn, hint: str) -> str:
+        """
+        Резолвит подсказку party в канонический ID party.
+
+        Ищет party по подсказке среди известных parties в леджере.
+        Если подсказка уже содержит "::" (канонический формат), возвращает как есть.
+
+        Args:
+            conn: Активное dazl соединение для запроса parties.
+            hint: Подсказка party (например, "Registrar", "Owner").
+
+        Returns:
+            Канонический ID party (например, "Registrar-123::abc...") или
+            исходная подсказка, если party не найден.
+        """
         if "::" in hint:
             return hint
         try:
@@ -116,6 +196,22 @@ class RealEstateHandler:
         return hint
 
     async def _exercise(self, contract_id: str, choice: str, argument: Dict[str, Any], extra_act_as=None):
+        """
+        Выполняет choice на контракте RealEstate.
+
+        Args:
+            contract_id: ID контракта для выполнения choice.
+            choice: Имя choice (например, "Transfer", "ListForSale").
+            argument: Аргументы choice в виде словаря.
+            extra_act_as: Дополнительные parties для multi-controller choices
+                          (например, для Buy нужны buyer и seller).
+
+        Returns:
+            JSON-совместимый результат выполнения choice.
+
+        Raises:
+            Exception: При ошибках выполнения choice (валидация, авторизация и т.д.).
+        """
         act_as = [Party(self.party)]
         if extra_act_as:
             act_as.extend(extra_act_as)
@@ -146,6 +242,29 @@ class RealEstateHandler:
         currency: str,
         listed: bool = False,
     ):
+        """
+        Создает новый контракт RealEstate в леджере.
+
+        Args:
+            registrar: Party регистратора (подписант контракта).
+            owner: Party начального владельца.
+            property_id: Уникальный ID объекта недвижимости.
+            address: Адрес объекта недвижимости.
+            property_type: Тип объекта (например, "apartment", "house").
+            area: Площадь в квадратных метрах (строка, будет преобразована в Decimal).
+            meta_json: JSON строка с дополнительными метаданными.
+            price: Начальная цена (строка, будет преобразована в Decimal).
+            currency: Код валюты (например, "USD", "EUR").
+            listed: Выставить на продажу сразу при создании (по умолчанию False).
+
+        Returns:
+            Dict с полями:
+            - contractId: ID созданного контракта
+            - payload: Данные контракта
+
+        Raises:
+            Exception: При ошибках создания контракта или валидации.
+        """
         registrar_id = await self._resolve_party(self.client, registrar)
         owner_id = await self._resolve_party(self.client, owner)
 
@@ -170,15 +289,66 @@ class RealEstateHandler:
         return to_jsonable(event)
 
     async def transfer_property_async(self, contract_id: str, new_owner: str):
+        """
+        Передает право собственности новому владельцу (choice Transfer).
+
+        Args:
+            contract_id: ID контракта RealEstate.
+            new_owner: Party нового владельца.
+
+        Returns:
+            Результат выполнения choice (новый контракт с обновленным owner).
+
+        Raises:
+            Exception: Если контракт архивирован или вызов не авторизован.
+        """
         return await self._exercise(contract_id, "Transfer", {"newOwner": new_owner})
 
     async def update_meta_async(self, contract_id: str, meta_json: str):
+        """
+        Обновляет метаданные объекта недвижимости (choice UpdateMeta).
+
+        Args:
+            contract_id: ID контракта RealEstate.
+            meta_json: Новая JSON строка с метаданными.
+
+        Returns:
+            Результат выполнения choice (новый контракт с обновленными метаданными).
+
+        Raises:
+            Exception: Если контракт архивирован или вызов не авторизован.
+        """
         return await self._exercise(contract_id, "UpdateMeta", {"newMetaJson": meta_json})
 
     async def archive_property_async(self, contract_id: str):
+        """
+        Архивирует контракт RealEstate (choice ArchiveProperty).
+
+        Может быть выполнено только регистратором.
+
+        Args:
+            contract_id: ID контракта RealEstate.
+
+        Returns:
+            Результат выполнения choice (пустой объект).
+
+        Raises:
+            Exception: Если контракт уже архивирован или вызов не авторизован.
+        """
         return await self._exercise(contract_id, "ArchiveProperty", {})
 
     async def list_properties_async(self):
+        """
+        Получает список всех активных контрактов RealEstate, видимых текущему party.
+
+        Returns:
+            List[Dict]: Список контрактов, каждый содержит:
+            - contractId: ID контракта
+            - payload: Данные контракта (все поля RealEstate)
+
+        Raises:
+            Exception: При ошибках запроса к леджеру.
+        """
         result = []
         async for event in self.client.query("RealEstate:RealEstate"):
             if isinstance(event, CreateEvent):
@@ -189,6 +359,23 @@ class RealEstateHandler:
         return result
 
     async def mint_cash_async(self, issuer: str, owner: str, amount: str, currency: str):
+        """
+        Создает новый контракт Cash (демо-деньги для оплаты покупки).
+
+        Args:
+            issuer: Party эмитента (обычно продавец).
+            owner: Party владельца денег (обычно покупатель).
+            amount: Сумма (строка, будет преобразована в Decimal).
+            currency: Код валюты (например, "USD", "EUR").
+
+        Returns:
+            Dict с полями:
+            - contractId: ID созданного контракта Cash
+            - payload: Данные контракта
+
+        Raises:
+            Exception: При ошибках создания контракта или валидации (amount > 0).
+        """
         issuer_id = await self._resolve_party(self.client, issuer)
         owner_id = await self._resolve_party(self.client, owner)
         event = await self.client.create(
@@ -204,6 +391,17 @@ class RealEstateHandler:
         return to_jsonable(event)
 
     async def list_cash_async(self):
+        """
+        Получает список всех активных контрактов Cash, видимых текущему party.
+
+        Returns:
+            List[Dict]: Список контрактов Cash, каждый содержит:
+            - contractId: ID контракта
+            - payload: Данные контракта (issuer, owner, amount, currency)
+
+        Raises:
+            Exception: При ошибках запроса к леджеру.
+        """
         result = []
         async for event in self.client.query("RealEstate:Cash"):
             if isinstance(event, CreateEvent):
@@ -214,6 +412,22 @@ class RealEstateHandler:
         return result
 
     async def list_for_sale_async(self, contract_id: str, price: str, currency: str):
+        """
+        Выставляет объект недвижимости на продажу (choice ListForSale).
+
+        Устанавливает флаг listed=True и обновляет цену и валюту.
+
+        Args:
+            contract_id: ID контракта RealEstate.
+            price: Цена продажи (строка, будет преобразована в Decimal, должна быть > 0).
+            currency: Код валюты (не может быть пустым).
+
+        Returns:
+            Результат выполнения choice (новый контракт с listed=True).
+
+        Raises:
+            Exception: Если контракт архивирован, цена <= 0, или currency пустая.
+        """
         return await self._exercise(
             contract_id,
             "ListForSale",
@@ -221,9 +435,52 @@ class RealEstateHandler:
         )
 
     async def delist_property_async(self, contract_id: str):
+        """
+        Снимает объект недвижимости с продажи (choice Delist).
+
+        Устанавливает флаг listed=False.
+
+        Args:
+            contract_id: ID контракта RealEstate.
+
+        Returns:
+            Результат выполнения choice (новый контракт с listed=False).
+
+        Raises:
+            Exception: Если контракт архивирован или вызов не авторизован.
+        """
         return await self._exercise(contract_id, "Delist", {})
 
     async def buy_property_async(self, contract_id: str, price: str, currency: str, buyer: str, payment_cid: str, seller: str):
+        """
+        Покупает объект недвижимости (choice Buy - multi-controller).
+
+        Требует подписи как продавца (owner), так и покупателя (buyer).
+        Валидирует точное совпадение цены, валюты и платежного контракта.
+        При успехе:
+        1. Архивирует Cash контракт покупателя.
+        2. Создает новый Cash контракт для продавца.
+        3. Переносит собственность на покупателя.
+
+        Args:
+            contract_id: ID контракта RealEstate для покупки.
+            price: Предлагаемая цена (должна совпадать с ценой в контракте).
+            currency: Валюта (должна совпадать с валютой в контракте).
+            buyer: Party покупателя.
+            payment_cid: ID контракта Cash с точной суммой и валютой.
+            seller: Party продавца (текущий owner).
+
+        Returns:
+            Результат выполнения choice (новый контракт с buyer как owner).
+
+        Raises:
+            Exception: Если:
+            - контракт не выставлен на продажу (listed=False)
+            - цена или валюта не совпадают
+            - payment contract не принадлежит buyer
+            - сумма в payment контракте не совпадает
+            - вызов не авторизован обоими parties
+        """
         buyer_id = await self._resolve_party(self.client, buyer)
         seller_id = await self._resolve_party(self.client, seller)
         return await self._exercise(
@@ -239,6 +496,17 @@ class RealEstateHandler:
         )
 
     async def list_parties_async(self):
+        """
+        Получает список всех известных parties в леджере.
+
+        Returns:
+            List[Dict]: Список parties, каждый содержит:
+            - id: Канонический ID party
+            - displayName: Отображаемое имя party
+
+        Raises:
+            Exception: При ошибках запроса к леджеру.
+        """
         infos = await self.client.list_known_parties()
         return [
             {"id": str(info.party), "displayName": info.display_name}
@@ -246,6 +514,23 @@ class RealEstateHandler:
         ]
 
     async def allocate_parties_async(self, hints: List[str]):
+        """
+        Создает новые parties в леджере (пропускает уже существующие).
+
+        Проверяет существование каждого party перед созданием.
+        Party считается существующим, если его ID начинается с "{hint}-"
+        или displayName совпадает с hint.
+
+        Args:
+            hints: Список подсказок для создания parties (например, ["Buyer", "Seller"]).
+
+        Returns:
+            List[str]: Список канонических ID созданных parties.
+            Пустой список, если все parties уже существовали.
+
+        Raises:
+            Exception: При ошибках создания parties в леджере.
+        """
         infos = await self.client.list_known_parties()
 
         created = []
