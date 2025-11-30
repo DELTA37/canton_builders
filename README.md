@@ -18,7 +18,10 @@ python main.py --host localhost --port 26865 create \
   --address "221B Baker Street" \
   --property-type apartment \
   --area 72.5 \
-  --meta-json '{"notes":"first listing"}'
+  --meta-json '{"notes":"first listing"}' \
+  --price 500000.0 \
+  --currency USD \
+  --listed
 ```
 
 ## Transfer a property to a new owner
@@ -30,12 +33,53 @@ python main.py --host localhost --port 26865 transfer \
   --party Owner
 ```
 
+## List property for sale / delist
+```
+python main.py --host localhost --port 26865 list-for-sale \
+  --cid <cid> \
+  --price 510000.0 \
+  --currency USD \
+  --party Owner
+
+python main.py --host localhost --port 26865 delist \
+  --cid <cid> \
+  --party Owner
+```
+
+## Buy a listed property
+The seller exercises `Buy` (as controller) and references the buyer's cash contract (exact amount/currency).
+```
+python main.py --host localhost --port 26865 buy \
+  --cid <cid> \
+  --price 510000.0 \
+  --currency USD \
+  --buyer Buyer \
+  --payment-cid <cash-cid> \
+  --seller Seller \
+  --party Buyer    # acting party includes buyer; seller added via --seller
+```
+
 ## Remove a property (archive)
 The registrar archives the property contract. Replace `<cid>` with the `contractId` you want to close.
 ```
 python main.py --host localhost --port 26865 archive \
   --cid <cid> \
   --party Registrar
+```
+
+## Cash (demo money)
+Mint cash for a user (issuer + owner sign):
+```
+python main.py --host localhost --port 26865 mint-cash \
+  --issuer Seller \
+  --owner Buyer \
+  --amount 510000.0 \
+  --currency USD
+```
+
+List cash visible to a party:
+```
+python main.py --host localhost --port 26865 list-cash --party Buyer
 ```
 
 ## Inspect current properties

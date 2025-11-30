@@ -115,14 +115,17 @@ class RealEstateHandler:
             pass
         return hint
 
-    async def _exercise(self, contract_id: str, choice: str, argument: Dict[str, Any]):
+    async def _exercise(self, contract_id: str, choice: str, argument: Dict[str, Any], extra_act_as=None):
+        act_as = [Party(self.party)]
+        if extra_act_as:
+            act_as.extend(extra_act_as)
         res = await self.client.exercise(
             "RealEstate:RealEstate",
             contract_id,
             choice,
             argument,
-            act_as=[Party(self.party)],
-            read_as=[Party(self.party)],
+            act_as=act_as,
+            read_as=act_as,
         )
         return to_jsonable(res)
 
@@ -139,6 +142,9 @@ class RealEstateHandler:
         property_type: str,
         area: str,
         meta_json: str,
+        price: str,
+        currency: str,
+        listed: bool = False,
     ):
         registrar_id = await self._resolve_party(self.client, registrar)
         owner_id = await self._resolve_party(self.client, owner)
@@ -155,6 +161,9 @@ class RealEstateHandler:
                 "metaJson": meta_json,
                 "status": "Active",
                 "history": [],
+                "listed": listed,
+                "price": price,
+                "currency": currency,
             },
             act_as=[Party(registrar_id)],
         )
@@ -178,6 +187,56 @@ class RealEstateHandler:
                     "payload": to_jsonable(event.payload),
                 })
         return result
+
+    async def mint_cash_async(self, issuer: str, owner: str, amount: str, currency: str):
+        issuer_id = await self._resolve_party(self.client, issuer)
+        owner_id = await self._resolve_party(self.client, owner)
+        event = await self.client.create(
+            "RealEstate:Cash",
+            {
+                "issuer": issuer_id,
+                "owner": owner_id,
+                "currency": currency,
+                "amount": amount,
+            },
+            act_as=[Party(owner_id)],
+        )
+        return to_jsonable(event)
+
+    async def list_cash_async(self):
+        result = []
+        async for event in self.client.query("RealEstate:Cash"):
+            if isinstance(event, CreateEvent):
+                result.append({
+                    "contractId": str(event.contract_id),
+                    "payload": to_jsonable(event.payload),
+                })
+        return result
+
+    async def list_for_sale_async(self, contract_id: str, price: str, currency: str):
+        return await self._exercise(
+            contract_id,
+            "ListForSale",
+            {"newPrice": price, "newCurrency": currency},
+        )
+
+    async def delist_property_async(self, contract_id: str):
+        return await self._exercise(contract_id, "Delist", {})
+
+    async def buy_property_async(self, contract_id: str, price: str, currency: str, buyer: str, payment_cid: str, seller: str):
+        buyer_id = await self._resolve_party(self.client, buyer)
+        seller_id = await self._resolve_party(self.client, seller)
+        return await self._exercise(
+            contract_id,
+            "Buy",
+            {
+                "offeredPrice": price,
+                "offeredCurrency": currency,
+                "buyer": buyer_id,
+                "paymentCid": payment_cid,
+            },
+            extra_act_as=[Party(buyer_id), Party(seller_id)],
+        )
 
     async def list_parties_async(self):
         infos = await self.client.list_known_parties()

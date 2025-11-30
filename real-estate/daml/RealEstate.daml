@@ -4,6 +4,28 @@ import DA.Text()
 
 data PropertyStatus = Active | Archived deriving (Eq, Show)
 
+template Cash
+  with
+    issuer : Party
+    owner : Party
+    currency : Text
+    amount : Decimal
+  where
+    signatory owner
+    observer issuer
+
+    ensure amount > 0.0
+
+    choice CashTransfer : ContractId Cash
+      with
+        newOwner : Party
+      controller owner, newOwner
+      do
+        assertMsg "Cash must be positive" (amount > 0.0)
+        newCid <- create this with owner = newOwner
+        archive self
+        return newCid
+
 template RealEstate
   with
     registrar : Party         -- registrar/notary
@@ -15,11 +37,18 @@ template RealEstate
     metaJson : Text           -- free-form JSON metadata
     status : PropertyStatus   -- lifecycle status
     history : [Party]         -- owner history (latest appended)
+    listed : Bool             -- is the property on the market
+    price : Decimal           -- asking price
+    currency : Text           -- currency code (e.g., USD, EUR)
   where
     signatory registrar
     observer owner
 
-    ensure status == Active
+    ensure
+      status == Active
+      && price >= 0.0
+      && ((not listed) || price > 0.0)
+      && ((not listed) || currency /= "")
 
     choice Transfer : ContractId RealEstate
       with
@@ -31,6 +60,7 @@ template RealEstate
           with
             owner = newOwner
             history = history <> [owner]
+            listed = False
         return newCid
 
     choice UpdateMeta : ContractId RealEstate
@@ -40,6 +70,59 @@ template RealEstate
       do
         assertMsg "Cannot update archived property" (status == Active)
         newCid <- create this with metaJson = newMetaJson
+        return newCid
+
+    choice ListForSale : ContractId RealEstate
+      with
+        newPrice : Decimal
+        newCurrency : Text
+      controller owner
+      do
+        assertMsg "Cannot list archived property" (status == Active)
+        assertMsg "Price must be positive" (newPrice > 0.0)
+        assertMsg "Currency required" (newCurrency /= "")
+        newCid <- create this
+          with
+            listed = True
+            price = newPrice
+            currency = newCurrency
+        return newCid
+
+    choice Delist : ContractId RealEstate
+      controller owner
+      do
+        assertMsg "Cannot delist archived property" (status == Active)
+        newCid <- create this with listed = False
+        return newCid
+
+    choice Buy : ContractId RealEstate
+      with
+        offeredPrice : Decimal
+        offeredCurrency : Text
+        buyer : Party
+        paymentCid : ContractId Cash
+      controller owner, buyer
+      do
+        assertMsg "Cannot buy archived property" (status == Active)
+        assertMsg "Property not listed for sale" listed
+        assertMsg "Price mismatch" (price == offeredPrice)
+        assertMsg "Currency mismatch" (currency == offeredCurrency)
+        payment <- fetch paymentCid
+        assertMsg "Payment owner mismatch" (payment.owner == buyer)
+        assertMsg "Payment currency mismatch" (payment.currency == offeredCurrency)
+        assertMsg "Payment amount mismatch" (payment.amount == offeredPrice)
+        -- Move cash: archive buyer cash and re-issue to seller
+        _ <- exercise paymentCid Archive
+        _ <- create Cash
+          with issuer = payment.issuer
+               owner = owner
+               currency = payment.currency
+               amount = payment.amount
+        newCid <- create this
+          with
+            owner = buyer
+            history = history <> [owner]
+            listed = False
         return newCid
 
     choice ArchiveProperty : ()

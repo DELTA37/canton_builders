@@ -23,6 +23,9 @@ setup = script do
         metaJson = meta
         status = Active
         history = []
+        listed = False
+        price = 500000.0
+        currency = "USD"
 
   debug ("Created RealEstate", cid)
 

@@ -5,7 +5,10 @@ import RealEstate
 import DA.Assert (assertEq)
 
 test : Script ()
-test = testHappy
+test = do
+  testHappy
+  testTransferMustFailForNonOwner
+  testMarketplaceFlow
 
 testHappy : Script ()
 testHappy = script do
@@ -27,6 +30,9 @@ testHappy = script do
         metaJson = meta
         status = Active
         history = []
+        listed = False
+        price = 500000.0
+        currency = "USD"
 
   debug ("Created RealEstate", cid)
 
@@ -64,6 +70,9 @@ testTransferMustFailForNonOwner = script do
            metaJson = "{}"
            status = Active
            history = []
+           listed = False
+           price = 250000.0
+           currency = "USD"
 
   submitMustFail registrar do
     exerciseCmd cid (Transfer with newOwner = intruder)
@@ -71,3 +80,47 @@ testTransferMustFailForNonOwner = script do
   pure ()
 
 -- No archive tests here to keep ledger state simple in scripts.
+
+testMarketplaceFlow : Script ()
+testMarketplaceFlow = script do
+  registrar <- allocateParty "Registrar"
+  owner <- allocateParty "Seller"
+  buyer <- allocateParty "Buyer"
+
+  payCid <- submit buyer do
+    createCmd Cash
+      with issuer = owner
+           owner = buyer
+           currency = "USD"
+           amount = 320000.0
+
+  cid <- submit registrar do
+    createCmd RealEstate
+      with registrar
+           owner
+           propertyId = "ID-SALE-1"
+           address = "Market St 7"
+           propertyType = "loft"
+           area = 80.0
+           metaJson = "{}"
+           status = Active
+           history = []
+           listed = False
+           price = 300000.0
+           currency = "USD"
+
+  cidListed <- submit owner do
+    exerciseCmd cid (ListForSale with newPrice = 320000.0, newCurrency = "USD")
+
+  cidBought <- submitMulti [owner, buyer] [buyer]
+    (exerciseCmd cidListed (Buy with offeredPrice = 320000.0, offeredCurrency = "USD", buyer, paymentCid = payCid))
+
+  mState <- queryContractId registrar cidBought
+  case mState of
+    Some st -> do
+      assertEq st.owner buyer
+      assertEq st.listed False
+      assertEq st.history [owner]
+    None -> abort "Expected contract to exist after buy"
+
+  pure ()
