@@ -29,8 +29,8 @@
 
 ## Python Client & UI
 - Dependencies in `python_client/requirements.txt` (`requests`, `streamlit`); install with `pip install -r python_client/requirements.txt`.
-- CLI: `python python_client/client.py create --registrar Registrar --owner Owner --property-id ID-42 --address "Main St" --property-type apartment --area 50.0 --meta-json '{}' --base-url http://localhost:17575`.
-- UI: `streamlit run python_client/ui.py` (uses `JSON_API_URL`/`LEDGER_TOKEN` or sidebar fields).
+- CLI: `python main.py create --registrar Registrar --owner Owner --property-id ID-42 --address "Main St" --property-type apartment --area 50.0 --meta-json '{}' --host localhost --port 26865`.
+- UI: `streamlit run ui.py` (uses `LEDGER_HOST`/`LEDGER_PORT` or sidebar fields).
 
 ## Commit & Pull Request Guidelines
 - Commit messages follow the existing short, imperative style (`fix canton net`, `canton initial`); keep subject lines under ~50 chars.

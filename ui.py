@@ -1,16 +1,9 @@
+import asyncio
 import os
 
 import streamlit as st
 
-from client import (
-  DEFAULT_LEDGER_HOST,
-  DEFAULT_LEDGER_PORT,
-  archive_property,
-  create_property,
-  list_properties,
-  transfer_property,
-  update_meta,
-)
+from python_client.client import DEFAULT_LEDGER_HOST, DEFAULT_LEDGER_PORT, RealEstateHandler
 
 st.set_page_config(page_title="Real Estate Ledger", layout="wide")
 st.title("Real Estate Ledger (dazl/gRPC)")
@@ -18,8 +11,20 @@ st.title("Real Estate Ledger (dazl/gRPC)")
 with st.sidebar:
   st.header("Connection")
   host = st.text_input("Ledger host", value=os.getenv("LEDGER_HOST", DEFAULT_LEDGER_HOST))
-  port = st.number_input("Ledger port", value=int(os.getenv("LEDGER_PORT", str(DEFAULT_LEDGER_PORT))), step=1)
+  port = st.number_input(
+    "Ledger port",
+    value=int(os.getenv("LEDGER_PORT", str(DEFAULT_LEDGER_PORT))),
+    step=1,
+  )
   st.caption("Defaults match `sandbox.conf` ledger-api (e.g., 26865).")
+
+
+def run_with_handler(party_hint: str, action):
+  async def _run():
+    async with RealEstateHandler(host=host, port=int(port), party=party_hint) as handler:
+      return await action(handler)
+  return asyncio.run(_run())
+
 
 st.subheader("Create Property")
 with st.form("create"):
@@ -33,16 +38,17 @@ with st.form("create"):
   submitted = st.form_submit_button("Create")
   if submitted:
     try:
-      resp = create_property(
-        registrar=registrar,
-        owner=owner,
-        property_id=property_id,
-        address=address,
-        property_type=property_type,
-        area=area,
-        meta_json=meta_json,
-        host=host,
-        port=int(port),
+      resp = run_with_handler(
+        registrar,
+        lambda handler: handler.create_property_async(
+          registrar=registrar,
+          owner=owner,
+          property_id=property_id,
+          address=address,
+          property_type=property_type,
+          area=area,
+          meta_json=meta_json,
+        ),
       )
       st.success("Created")
       st.json(resp)
@@ -57,7 +63,13 @@ with st.form("transfer"):
   submitted = st.form_submit_button("Transfer")
   if submitted:
     try:
-      resp = transfer_property(cid, new_owner, party=transfer_party, host=host, port=int(port))
+      resp = run_with_handler(
+        transfer_party,
+        lambda handler: handler.transfer_property_async(
+          contract_id=cid,
+          new_owner=new_owner,
+        ),
+      )
       st.success("Transferred")
       st.json(resp)
     except Exception as ex:
@@ -71,7 +83,13 @@ with st.form("update_meta"):
   submitted = st.form_submit_button("Update Meta")
   if submitted:
     try:
-      resp = update_meta(cid_meta, new_meta_json, party=update_party, host=host, port=int(port))
+      resp = run_with_handler(
+        update_party,
+        lambda handler: handler.update_meta_async(
+          contract_id=cid_meta,
+          meta_json=new_meta_json,
+        ),
+      )
       st.success("Updated meta")
       st.json(resp)
     except Exception as ex:
@@ -84,7 +102,10 @@ with st.form("archive"):
   submitted = st.form_submit_button("Archive")
   if submitted:
     try:
-      resp = archive_property(cid_archive, party=archive_party, host=host, port=int(port))
+      resp = run_with_handler(
+        archive_party,
+        lambda handler: handler.archive_property_async(contract_id=cid_archive),
+      )
       st.success("Archived")
       st.json(resp)
     except Exception as ex:
@@ -94,7 +115,7 @@ st.subheader("Active Properties")
 list_party = st.text_input("Party for list", value="Registrar", key="list-party")
 if st.button("Refresh"):
   try:
-    resp = list_properties(party=list_party, host=host, port=int(port))
+    resp = run_with_handler(list_party, lambda handler: handler.list_properties_async())
     st.json(resp)
   except Exception as ex:
     st.error(f"List failed: {ex}")

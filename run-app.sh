@@ -10,6 +10,8 @@ set -euo pipefail
 #   WAIT_FOR_SIGNAL (default yes) passed to daml start
 #   LEDGER_HOST (default localhost) LEDGER_PORT (default 26865) passed to UI
 
+cd real-estate
+
 JSON_API_PORT="${JSON_API_PORT:-17575}"
 SANDBOX_CONFIG="${SANDBOX_CONFIG:-sandbox.conf}"
 WAIT_SECONDS="${WAIT_SECONDS:-60}"
@@ -30,8 +32,6 @@ if [ "${SKIP_SANDBOX:-false}" != "true" ]; then
   daml start \
     --sandbox-option --config="${SANDBOX_CONFIG}" \
     --json-api-port "${JSON_API_PORT}" \
-#    --json-api-option "--ledger-host ${LEDGER_HOST}" \
-#    --json-api-option "--ledger-port ${LEDGER_PORT}" \
     --wait-for-signal "${WAIT_FOR_SIGNAL}" \
     >log/app-sandbox.log 2>&1 &
   SANDBOX_PID=$!
@@ -63,4 +63,5 @@ fi
 export LEDGER_HOST LEDGER_PORT
 export JSON_API_URL="http://localhost:${JSON_API_PORT}"
 echo "Starting Streamlit UI on port ${UI_PORT} (LEDGER_HOST=${LEDGER_HOST} LEDGER_PORT=${LEDGER_PORT})..."
-exec streamlit run python_client/ui.py --server.port "${UI_PORT}" --server.headless true
+cd ..
+exec streamlit run ui.py --server.port "${UI_PORT}" --server.headless true

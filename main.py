@@ -1,74 +1,106 @@
 import argparse
 import asyncio
 import json
-from dreal.settings import LEDGER_URL
-from dreal.client import RealEstateClient, RealEstateMeta
+
+from python_client.client import (
+    DEFAULT_LEDGER_HOST,
+    DEFAULT_LEDGER_PORT,
+    DEFAULT_PARTY,
+    RealEstateHandler,
+)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="RealEstate Canton CLI")
-    subparsers = parser.add_subparsers(dest="command")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="dazl gRPC client for RealEstate template.")
+    parser.add_argument("--host", default=DEFAULT_LEDGER_HOST)
+    parser.add_argument("--port", type=int, default=DEFAULT_LEDGER_PORT)
+    parser.add_argument("--party", default=DEFAULT_PARTY, help="Default party for list; required for exercises.")
+    sub = parser.add_subparsers(dest="cmd", required=True)
 
-    # list
-    subparsers.add_parser("list", help="List all properties")
+    create_cmd = sub.add_parser("create", help="Create a RealEstate contract")
+    create_cmd.add_argument("--registrar", required=True)
+    create_cmd.add_argument("--owner", required=True)
+    create_cmd.add_argument("--property-id", required=True)
+    create_cmd.add_argument("--address", required=True)
+    create_cmd.add_argument("--property-type", required=True)
+    create_cmd.add_argument("--area", required=True, help="decimal, e.g. 72.5")
+    create_cmd.add_argument("--meta-json", required=True, help='e.g. \'{"address":"Baker St"}\'')
 
-    # create
-    parser_create = subparsers.add_parser("create", help="Create a new property")
-    parser_create.add_argument("--property-id", required=True, help="Unique property ID")
-    parser_create.add_argument("--owner", required=True, help="Owner name")
-    parser_create.add_argument("--address", required=True)
-    parser_create.add_argument("--area", type=float, required=True)
-    parser_create.add_argument("--cadastral-number", required=True)
-    parser_create.add_argument("--building-year", type=int, required=True)
+    transfer_cmd = sub.add_parser("transfer", help="Transfer a RealEstate contract to a new owner")
+    transfer_cmd.add_argument("--cid", required=True)
+    transfer_cmd.add_argument("--new-owner", required=True)
+    transfer_cmd.add_argument("--party", required=True, help="Current owner")
 
-    # transfer
-    parser_transfer = subparsers.add_parser("transfer", help="Transfer property to new owner")
-    parser_transfer.add_argument("--property-id", required=True)
-    parser_transfer.add_argument("--current-owner", required=True)
-    parser_transfer.add_argument("--new-owner", required=True)
+    update_cmd = sub.add_parser("update-meta", help="Update metadata JSON for a RealEstate contract")
+    update_cmd.add_argument("--cid", required=True)
+    update_cmd.add_argument("--meta-json", required=True)
+    update_cmd.add_argument("--party", required=True, help="Current owner")
 
-    # archive all
-    subparsers.add_parser("archive_all", help="Archive all properties")
+    archive_cmd = sub.add_parser("archive", help="Archive a RealEstate contract")
+    archive_cmd.add_argument("--cid", required=True)
+    archive_cmd.add_argument("--party", required=True, help="Registrar")
 
-    args = parser.parse_args()
-    return args
+    list_cmd = sub.add_parser("list", help="List RealEstate contracts visible to the party")
+    list_cmd.add_argument("--party", help="Party to query as; defaults to --party")
+
+    alloc_cmd = sub.add_parser("allocate-parties", help="Ensure parties exist on ledger")
+    alloc_cmd.add_argument("--parties", nargs="+", required=True, help="Party hints/display names to ensure")
+
+    sub.add_parser("list-parties", help="List known parties")
+    return parser.parse_args()
 
 
-async def main(command: str, **kwargs):
-    async with RealEstateClient() as client:
+def party_for_command(args: argparse.Namespace) -> str:
+    if args.cmd == "create":
+        return args.registrar or args.party
+    if args.cmd in {"transfer", "update-meta", "archive", "list"}:
+        return args.party
+    if args.cmd == "allocate-parties":
+        return args.party or (args.parties[0] if args.parties else DEFAULT_PARTY)
+    if args.cmd == "list-parties":
+        return args.party
+    return DEFAULT_PARTY
 
-        if command == "list":
-            props = await client.list_properties()
-            print(json.dumps(props, indent=2))
 
-        # elif command == "create":
-        #     meta = RealEstateMeta(
-        #         address=args.address,
-        #         area_m2=args.area,
-        #         cadastral_number=args.cadastral_number,
-        #         building_year=args.building_year,
-        #         owner_name=args.owner
-        #     )
-        #     cid = await client.create_property(args.property_id, args.owner, meta)
-        #     print("Created property contract:", cid)
-        #
-        # elif command == "transfer":
-        #     active_props = await client.list_properties()
-        #     prop = next((p for p in active_props if p["propertyId"] == args.property_id), None)
-        #     if not prop:
-        #         print(f"Property {args.property_id} not found")
-        #         return
-        #     cid = prop.get("contract_id")
-        #     result = await client.transfer_property(cid, args.current_owner, args.new_owner)
-        #     print("Transfer result:", result)
-        #
-        # elif command == "archive_all":
-        #     await client.archive_all_properties()
-        #     print("All properties archived")
-        #
-        # else:
-        #     parser.print_help()
+async def run_command(args: argparse.Namespace) -> dict:
+    party_hint = party_for_command(args)
+    async with RealEstateHandler(host=args.host, port=args.port, party=party_hint) as handler:
+        if args.cmd == "create":
+            return await handler.create_property_async(
+                registrar=args.registrar,
+                owner=args.owner,
+                property_id=args.property_id,
+                address=args.address,
+                property_type=args.property_type,
+                area=args.area,
+                meta_json=args.meta_json,
+            )
+        if args.cmd == "transfer":
+            return await handler.transfer_property_async(
+                contract_id=args.cid,
+                new_owner=args.new_owner,
+            )
+        if args.cmd == "update-meta":
+            return await handler.update_meta_async(
+                contract_id=args.cid,
+                meta_json=args.meta_json,
+            )
+        if args.cmd == "archive":
+            return await handler.archive_property_async(contract_id=args.cid)
+        if args.cmd == "list":
+            return await handler.list_properties_async()
+        if args.cmd == "allocate-parties":
+            return await handler.allocate_parties_async(hints=args.parties)
+        if args.cmd == "list-parties":
+            return await handler.list_parties_async()
+    raise SystemExit("Unknown command")
+
+
+def main() -> None:
+    args = parse_args()
+    output = asyncio.run(run_command(args))
+    print(json.dumps(output, indent=2))
 
 
 if __name__ == "__main__":
-    asyncio.run(main(**vars(parse_args())))
+    main()

@@ -1,2 +1,0 @@
-dazl>=7.9.0
-streamlit>=1.36.0
